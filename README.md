@@ -2,8 +2,7 @@
 > Real-time AI medical interpreter for multilingual clinical consultations
 
 ## Demo
-https://github.com/user-attachments/assets/5f4c9435-9ab2-4cc7-aa07-2fa495697bc9
-
+[▶ Watch Demo](https://github.com/user-attachments/assets/5f4c9435-9ab2-4cc7-aa07-2fa495697bc9)
 ## Screenshots
 ![Setup Screen](https://github.com/user-attachments/assets/4d7593af-7443-4388-939c-b71d77a1a48f)
 ![Session Screen](https://github.com/user-attachments/assets/9de35844-2ef0-4e9b-b8c8-7adc77ef5317)
