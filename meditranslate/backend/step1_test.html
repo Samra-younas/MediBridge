@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Step 1 Test — Auto Silence Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0f172a; color:#f1f5f9; font-family:'Sora',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:32px 16px; }
+  h1 { font-size:22px; font-weight:700; margin-bottom:4px; }
+  .sub { font-size:13px; color:#64748b; font-family:'JetBrains Mono',monospace; margin-bottom:32px; }
+
+  .card { background:#1e293b; border:1px solid #334155; border-radius:16px; padding:24px; width:100%; max-width:520px; margin-bottom:16px; }
+  .card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; font-family:'JetBrains Mono',monospace; margin-bottom:16px; }
+
+  select { width:100%; padding:10px 12px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#f1f5f9; font-family:'Sora',sans-serif; font-size:13px; margin-bottom:10px; }
+  label { font-size:12px; color:#94a3b8; display:block; margin-bottom:4px; }
+
+  /* Big status circle */
+  .status-circle {
+    width:120px; height:120px; border-radius:50%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    margin:0 auto 20px; font-size:36px;
+    border:3px solid #334155;
+    transition:all 0.3s;
+    position:relative;
+  }
+  .status-circle.listening { border-color:#22c55e; background:rgba(34,197,94,.08); }
+  .status-circle.speaking  { border-color:#ef4444; background:rgba(239,68,68,.08); animation:pulse 1s ease-in-out infinite; }
+  .status-circle.processing{ border-color:#f59e0b; background:rgba(245,158,11,.08); }
+  .status-circle.playing   { border-color:#3b82f6; background:rgba(59,130,246,.08); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.3)} 50%{box-shadow:0 0 0 12px rgba(239,68,68,0)} }
+
+  .status-label { font-size:13px; font-weight:600; text-align:center; margin-bottom:8px; min-height:20px; }
+
+  /* Volume bar */
+  .vol-wrap { width:100%; height:8px; background:#0f172a; border-radius:4px; overflow:hidden; margin-bottom:16px; }
+  .vol-fill  { height:100%; border-radius:4px; width:0%; background:linear-gradient(90deg,#22c55e,#3b82f6); transition:width .05s; }
+
+  /* Start button */
+  .start-btn {
+    width:100%; padding:14px; border-radius:10px; border:none;
+    background:linear-gradient(135deg,#1d4ed8,#3b82f6);
+    color:#fff; font-size:15px; font-weight:700; cursor:pointer;
+    font-family:'Sora',sans-serif; transition:opacity .2s;
+  }
+  .start-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* Result */
+  .result { border-radius:10px; padding:14px 16px; border-left:3px solid; margin-bottom:0; }
+  .result.ok   { background:rgba(34,197,94,.08);  border-color:#22c55e; }
+  .result.fail { background:rgba(239,68,68,.08);  border-color:#ef4444; }
+  .result-speaker { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; font-family:'JetBrains Mono',monospace; margin-bottom:6px; }
+  .result-orig { font-size:14px; color:#f1f5f9; margin-bottom:4px; }
+  .result-trans { font-size:13px; color:#94a3b8; font-style:italic; }
+  .result-empty { font-size:13px; color:#475569; font-family:'JetBrains Mono',monospace; }
+
+  /* Log */
+  .log { background:#0a0f1a; border:1px solid #1e293b; border-radius:8px; padding:12px; height:200px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px; line-height:1.8; }
+  .log::-webkit-scrollbar { width:3px; }
+  .log::-webkit-scrollbar-thumb { background:#1e293b; }
+  .l-time { color:#475569; }
+  .l-ok   { color:#22c55e; }
+  .l-err  { color:#ef4444; }
+  .l-warn { color:#f59e0b; }
+  .l-info { color:#3b82f6; }
+
+  .log-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .clear-btn { font-size:11px; color:#475569; background:none; border:none; cursor:pointer; font-family:'JetBrains Mono',monospace; }
+  .clear-btn:hover { color:#94a3b8; }
+</style>
+</head>
+<body>
+
+<h1>🩺 Step 1 — Auto Silence Test</h1>
+<div class="sub">Speak → pause 3 sec → auto sends → plays translation</div>
+
+<!-- Config -->
+<div class="card">
+  <div class="card-title">⚙️ Language Config</div>
+  <label>Doctor Language</label>
+  <select id="src-code">
+    <option value="en">🇺🇸 English</option>
+    <option value="ur">🇵🇰 Urdu</option>
+    <option value="ar">🇸🇦 Arabic</option>
+    <option value="fr">🇫🇷 French</option>
+    <option value="hi">🇮🇳 Hindi</option>
+  </select>
+  <label>Patient Language</label>
+  <select id="tgt-code">
+    <option value="ur">🇵🇰 Urdu</option>
+    <option value="en">🇺🇸 English</option>
+    <option value="ar">🇸🇦 Arabic</option>
+    <option value="fr">🇫🇷 French</option>
+    <option value="hi">🇮🇳 Hindi</option>
+  </select>
+</div>
+
+<!-- Status -->
+<div class="card">
+  <div class="card-title">🎙️ Live Status</div>
+  <div class="status-circle" id="circle">🎙️</div>
+  <div class="status-label" id="status-label">Press Start to begin</div>
+  <div class="vol-wrap"><div class="vol-fill" id="vol-fill"></div></div>
+  <button class="start-btn" id="start-btn" onclick="toggleSession()">▶ Start Listening</button>
+</div>
+
+<!-- Latest result -->
+<div class="card">
+  <div class="card-title">📋 Latest Result</div>
+  <div id="result-area"><div class="result-empty">Nothing yet — start session and speak.</div></div>
+</div>
+
+<!-- Log -->
+<div class="card">
+  <div class="log-header">
+    <div class="card-title" style="margin:0">📄 Log</div>
+    <button class="clear-btn" onclick="clearLog()">clear</button>
+  </div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────
+let running      = false;
+let stream       = null;
+let analyser     = null;
+let audioCtx     = null;
+let volTimer     = null;
+let isPlaying    = false;   // true while TTS audio plays — blocks new recording
+
+const SILENCE_THRESHOLD = 12;   // volume below this = silence
+const SILENCE_MS        = 3000; // 3 seconds of silence → send
+const MIN_BLOB_SIZE     = 6000; // bytes — ignore tiny blobs (noise/clicks)
+
+// ── Logging ──────────────────────────────────────────
+function log(cls, msg) {
+  const el = document.getElementById('log');
+  const t  = new Date().toLocaleTimeString('en-GB', {hour12:false});
+  el.innerHTML += `<div><span class="l-time">${t}</span> <span class="${cls}">${msg}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ── UI helpers ────────────────────────────────────────
+function setStatus(icon, label, cls) {
+  const c = document.getElementById('circle');
+  c.textContent = icon;
+  c.className   = 'status-circle ' + cls;
+  document.getElementById('status-label').textContent = label;
+}
+
+function showResult(speaker, original, translation) {
+  document.getElementById('result-area').innerHTML = `
+    <div class="result ok">
+      <div class="result-speaker">${speaker}</div>
+      <div class="result-orig">${original}</div>
+      <div class="result-trans">→ ${translation}</div>
+    </div>`;
+}
+
+// ── Volume meter ──────────────────────────────────────
+function startVolMeter() {
+  const fill = document.getElementById('vol-fill');
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  volTimer = setInterval(() => {
+    analyser.getByteFrequencyData(data);
+    const vol = data.reduce((a,b)=>a+b,0) / data.length;
+    fill.style.width = Math.min(100, vol * 3) + '%';
+  }, 40);
+}
+function stopVolMeter() {
+  clearInterval(volTimer);
+  document.getElementById('vol-fill').style.width = '0%';
+}
+
+// ── Core loop ─────────────────────────────────────────
+async function recordLoop() {
+  if (!running) return;
+
+  // Wait while TTS is playing
+  while (isPlaying) {
+    await sleep(100);
+    if (!running) return;
+  }
+
+  setStatus('🎙️', 'Listening... speak now', 'listening');
+  log('l-info', '🎙️ Listening...');
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus' : 'audio/webm';
+
+  const recorder = new MediaRecorder(stream, { mimeType });
+  const chunks   = [];
+  recorder.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data); };
+  recorder.start(100);
+
+  // ── Silence detection ───────────────────────────────
+  await new Promise(resolve => {
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let silenceStart = null;
+    let speaking     = false;
+
+    const check = setInterval(() => {
+      if (!running) { clearInterval(check); resolve(); return; }
+
+      analyser.getByteFrequencyData(data);
+      const vol = data.reduce((a,b)=>a+b,0) / data.length;
+
+      if (vol >= SILENCE_THRESHOLD) {
+        // Voice detected
+        silenceStart = null;
+        if (!speaking) {
+          speaking = true;
+          setStatus('🔴', 'Speaking... (pause to send)', 'speaking');
+        }
+      } else {
+        // Silence
+        if (speaking) {
+          // Only count silence AFTER voice was detected
+          if (!silenceStart) silenceStart = Date.now();
+          const silenceDuration = Date.now() - silenceStart;
+
+          // Update label with countdown
+          const remaining = Math.max(0, SILENCE_MS - silenceDuration);
+          setStatus('⏸️', `Silence ${(silenceDuration/1000).toFixed(1)}s / 3s — keep quiet to send`, 'listening');
+
+          if (silenceDuration >= SILENCE_MS) {
+            clearInterval(check);
+            resolve();
+          }
+        }
+        // If never spoke, just keep listening silently
+      }
+    }, 100);
+  });
+
+  // Stop recorder
+  await new Promise(r => { recorder.onstop = r; recorder.stop(); });
+  const blob = new Blob(chunks, { type: mimeType });
+
+  log('l-info', `Blob size: ${(blob.size/1024).toFixed(1)} KB`);
+
+  if (!running) return;
+
+  if (blob.size < MIN_BLOB_SIZE) {
+    log('l-warn', `⚠️ Too small (${blob.size} bytes) — skipping`);
+    recordLoop(); // try again
+    return;
+  }
+
+  // ── Send to backend ─────────────────────────────────
+  setStatus('⏳', 'Sending to backend...', 'processing');
+  log('l-info', '⏳ Sending to backend...');
+
+  const srcCode = document.getElementById('src-code').value;
+  const tgtCode = document.getElementById('tgt-code').value;
+  const LANG_NAMES = { en:'English', ur:'Urdu', ar:'Arabic', fr:'French', hi:'Hindi' };
+  const srcName = LANG_NAMES[srcCode] || srcCode;
+  const tgtName = LANG_NAMES[tgtCode] || tgtCode;
+
+  try {
+    const b64 = await blobToBase64(blob);
+    const res = await fetch('http://localhost:8000/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio_base64: b64,
+        source_lang_code: srcCode,
+        source_lang_name: srcName,
+        target_lang_code: tgtCode,
+        target_lang_name: tgtName,
+        room_id: 'test-room',
+        speaker: 'Doctor',
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      log('l-warn', `⚠️ Backend: ${data.error} — trying again`);
+      setStatus('🎙️', 'No speech detected — try again', 'listening');
+    } else {
+      log('l-ok', `✅ [${data.detected_speaker || 'Doctor'}] "${data.transcript}" → "${data.translation}"`);
+      showResult(data.detected_speaker || 'Doctor', data.transcript, data.translation);
+
+      // ── Play TTS ──────────────────────────────────
+      if (data.audio_base64) {
+        isPlaying = true;
+        setStatus('🔊', 'Playing translation...', 'playing');
+        log('l-ok', '🔊 Playing audio...');
+
+        // Mute mic tracks while playing
+        stream.getTracks().forEach(t => t.enabled = false);
+
+        const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
+        try {
+          await audio.play();
+          await new Promise(r => audio.addEventListener('ended', r, { once: true }));
+          log('l-ok', '✅ Playback done');
+        } catch(e) {
+          log('l-err', `Audio error: ${e.message}`);
+        }
+
+        // Re-enable mic after short cooldown
+        await sleep(500);
+        stream.getTracks().forEach(t => t.enabled = true);
+        isPlaying = false;
+      }
+    }
+  } catch(e) {
+    log('l-err', `❌ Network error: ${e.message}`);
+    setStatus('❌', 'Backend error — is it running?', 'processing');
+    await sleep(2000);
+  }
+
+  // Loop again
+  if (running) recordLoop();
+}
+
+// ── Session toggle ────────────────────────────────────
+async function toggleSession() {
+  if (!running) {
+    // Start
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
+      });
+      audioCtx  = new AudioContext();
+      analyser  = audioCtx.createAnalyser();
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      analyser.fftSize = 512;
+
+      running = true;
+      isPlaying = false;
+      document.getElementById('start-btn').textContent = '⏹ Stop';
+      document.getElementById('src-code').disabled = true;
+      document.getElementById('tgt-code').disabled = true;
+
+      startVolMeter();
+      log('l-ok', '✅ Mic ready — session started');
+      recordLoop();
+    } catch(e) {
+      log('l-err', `Mic error: ${e.message}`);
+    }
+  } else {
+    // Stop
+    running   = false;
+    isPlaying = false;
+    stream?.getTracks().forEach(t => t.stop());
+    stream = null;
+    stopVolMeter();
+    setStatus('⏹️', 'Session stopped', '');
+    document.getElementById('start-btn').textContent = '▶ Start Listening';
+    document.getElementById('src-code').disabled = false;
+    document.getElementById('tgt-code').disabled = false;
+    log('l-warn', '⏹ Session stopped');
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function blobToBase64(blob) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onloadend = () => res(reader.result.split(',')[1]);
+    reader.onerror   = () => rej(new Error('Read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+// ── Init log ──────────────────────────────────────────
+log('l-info', 'Tool ready. Select languages → click Start.');
+log('l-info', 'Backend must be running: python app.py');
+</script>
+</body>
+</html>
